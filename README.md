@@ -1,10 +1,10 @@
-# wifi-guardian
+# tether
 
 A small Linux service that monitors Wi-Fi and tries saved networks in priority order. It uses NetworkManager's D-Bus API directly. It does not invoke networking commands or store Wi-Fi passwords.
 
 ## Recovery
 
-1. Probe the gateway and multiple public IPv4 addresses with ICMP, binding each socket to the configured Wi-Fi interface.
+1. Probe the gateway and multiple public IPv4 addresses with unprivileged ICMP sockets, binding each socket to the configured Wi-Fi interface.
 2. After repeated unhealthy samples, request a scan and try the configured saved profiles in order.
 3. If none work and no gateway answered, cycle the Wi-Fi radio. Permit at most three cycles during an outage.
 4. Keep the radio on and retry the saved profiles every minute, even after the reset budget is exhausted.
@@ -21,7 +21,9 @@ The reset counter and an interrupted radio reset are recorded atomically on disk
 - Linux, NetworkManager, and systemd for the supplied service unit.
 - Go 1.26 or newer to build.
 - Saved NetworkManager profiles with credentials available without a desktop session. Use system-wide profiles for unattended operation.
-- Root for the supplied service. Raw ICMP needs `CAP_NET_RAW`; root can also authorize NetworkManager operations over the system bus.
+- Your group must be allowed by `net.ipv4.ping_group_range`.
+- A user-specific Polkit rule authorizing NetworkManager connection control and Wi-Fi radio toggles.
+- User lingering for unattended startup before login.
 - Targets and gateway that answer ICMP. A gateway that blocks ping cannot reliably distinguish an upstream outage from a local failure.
 
 This version checks IPv4 connectivity. At least one internet target must meet the configured packet-loss threshold. It does not measure throughput or diagnose DNS failures. Probe setup errors stop that recovery iteration instead of triggering radio resets.
@@ -29,15 +31,15 @@ This version checks IPv4 connectivity. At least one internet target must meet th
 ## Configure
 
 ```sh
-go build -o bin/wifi-guardian .
-./bin/wifi-guardian -list
+go build -o bin/tether .
+./bin/tether -list
 cp config.example.json config.local.json
 ```
 
 Edit `config.local.json` with your interface and the UUID/SSID pairs from `-list`. Array order sets priority. Every entry must match an existing saved profile; the service never creates profiles or reads their secrets. `-list` and `-check` do not change network settings.
 
 ```sh
-sudo ./bin/wifi-guardian -config config.local.json -check
+./bin/tether -config config.local.json -check
 ```
 
 `-check` prints the current connection, whether it is whitelisted, and sent/received counts for each probe. It exits successfully when configuration and probes execute; inspect `internet_healthy` to see the health result. It never updates the state file.
@@ -54,7 +56,7 @@ sudo ./bin/wifi-guardian -config config.local.json -check
 | `wifi_off` | `3s` | Radio-off duration per reset |
 | `max_resets` | `3` | Reset budget, configurable from zero to three |
 | `stable_for` | `3m` | Healthy sampling period before clearing the counter |
-| `state_file` | `/var/lib/wifi-guardian/state.json` | Persistent reset budget and latest status |
+| `state_file` | `$XDG_STATE_HOME/tether/state.json`, defaulting to `~/.local/state/tether/state.json` | Persistent reset budget and latest status |
 
 Probe targets run concurrently; requests to each target run sequentially. Probe and activation time adds to the configured delays. A dropped packet does not immediately trigger a switch.
 
@@ -62,24 +64,28 @@ Probe targets run concurrently; requests to each target run sequentially. Probe 
 
 Installing and starting the service authorizes it to switch the configured Wi-Fi device between profiles and cycle the Wi-Fi radio. NetworkManager's radio toggle affects **all Wi-Fi devices** on the host.
 
+Fleet manages installation, authorization, and startup when `[tether] enabled = true` is set in its machine-local `.fleetrc`. Configuration is part of Fleet's encrypted dotfiles at `dotfiles/dot-config/tether/config.json`.
+
+For manual installation after setting up Polkit authorization and lingering:
+
 ```sh
-sudo install -Dm755 bin/wifi-guardian /usr/local/bin/wifi-guardian
-sudo install -Dm600 config.local.json /etc/wifi-guardian/config.json
-sudo install -Dm644 wifi-guardian.service /etc/systemd/system/wifi-guardian.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now wifi-guardian.service
+install -Dm755 bin/tether ~/.local/bin/tether
+install -Dm600 config.local.json ~/.config/tether/config.json
+install -Dm644 tether.service ~/.config/systemd/user/tether.service
+systemctl --user daemon-reload
+systemctl --user enable --now tether.service
 ```
 
-The service starts without waiting for internet access. systemd restarts it after a crash. Its state directory remains writable under the supplied sandbox; configure a different state path only if you also adjust the unit's writable paths.
+The user service starts without waiting for internet access. systemd restarts it after a crash. It uses the user's config and state directories; an omitted `state_file` selects the XDG state path.
 
-NetworkManager remains responsible for networking. Its own autoconnect behavior can affect which profile is active between recovery rounds. For predictable operation, configure autoconnect priorities consistently and disable autoconnect on unwanted profiles through your normal NetworkManager settings. The guardian only requests activation of listed UUID/SSID pairs.
+NetworkManager remains responsible for networking. Its own autoconnect behavior can affect which profile is active between recovery rounds. For predictable operation, configure autoconnect priorities consistently and disable autoconnect on unwanted profiles through your normal NetworkManager settings. Tether only requests activation of listed UUID/SSID pairs.
 
 ## Status
 
 ```sh
-journalctl -u wifi-guardian -f
-sudo cat /var/lib/wifi-guardian/state.json
-sudo systemctl stop wifi-guardian.service
+journalctl --user -u tether -f
+cat ~/.local/state/tether/state.json
+systemctl --user stop tether.service
 ```
 
 The service logs status transitions, failed connection attempts, and radio resets. `waiting_for_router` and a counter at the configured maximum indicate that radio resets are exhausted; connection attempts continue. `waiting_for_internet` means a gateway answered but all internet probes failed.
@@ -91,7 +97,7 @@ There is no remote alert transport. During a complete outage, the journal and st
 ```sh
 go test -race ./...
 go vet ./...
-CGO_ENABLED=0 go build -o bin/wifi-guardian .
+CGO_ENABLED=0 go build -o bin/tether .
 ```
 
 Recovery tests use a fake NetworkManager and do not change the host's networking.

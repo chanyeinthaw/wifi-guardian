@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/icmp"
@@ -32,39 +32,46 @@ type health struct {
 	Probes   []probeResult `json:"probes"`
 }
 
-var echoID atomic.Uint32
-
 // Bind every probe to the configured Wi-Fi device, including on VPN hosts.
 func ping(ctx context.Context, iface, target string, packets int, timeout time.Duration) probeResult {
 	result := probeResult{Target: target}
-	conn, err := net.ListenIP("ip4:icmp", &net.IPAddr{IP: net.IPv4zero})
+	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, unix.IPPROTO_ICMP)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	file := os.NewFile(uintptr(fd), "icmp")
+	defer file.Close()
+	if err := unix.SetsockoptString(fd, unix.SOL_SOCKET, unix.SO_BINDTODEVICE, iface); err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	if err := unix.Bind(fd, &unix.SockaddrInet4{}); err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	address, err := unix.Getsockname(fd)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	local, ok := address.(*unix.SockaddrInet4)
+	if !ok {
+		result.Error = "unexpected ICMP socket address"
+		return result
+	}
+	id := local.Port // Linux uses the ping socket's port as the echo identifier.
+	conn, err := net.FilePacketConn(file)
 	if err != nil {
 		result.Error = err.Error()
 		return result
 	}
 	defer conn.Close()
-	raw, err := conn.SyscallConn()
-	if err != nil {
-		result.Error = err.Error()
-		return result
-	}
-	var bindErr error
-	if err := raw.Control(func(fd uintptr) {
-		bindErr = unix.SetsockoptString(int(fd), unix.SOL_SOCKET, unix.SO_BINDTODEVICE, iface)
-	}); err != nil {
-		result.Error = err.Error()
-		return result
-	}
-	if bindErr != nil {
-		result.Error = bindErr.Error()
-		return result
-	}
 	// Interrupt a blocked read immediately on service shutdown.
 	stop := context.AfterFunc(ctx, func() { conn.Close() })
 	defer stop()
-	id := int(echoID.Add(1) & 0xffff)
-	payload := []byte("wifi-guardian:" + rand.Text())
-	dest := &net.IPAddr{IP: net.ParseIP(target)}
+	payload := []byte("tether:" + rand.Text())
+	dest := &net.UDPAddr{IP: net.ParseIP(target)}
 	if dest.IP == nil {
 		result.Error = "invalid IPv4 target"
 		return result
@@ -90,7 +97,7 @@ func ping(ctx context.Context, iface, target string, packets int, timeout time.D
 			return result
 		}
 		result.Sent++
-		if _, err := conn.WriteToIP(data, dest); err != nil {
+		if _, err := conn.WriteTo(data, dest); err != nil {
 			if errors.Is(err, unix.EPERM) || errors.Is(err, unix.EACCES) {
 				result.Error = err.Error()
 				return result
@@ -98,7 +105,7 @@ func ping(ctx context.Context, iface, target string, packets int, timeout time.D
 			continue
 		}
 		for {
-			n, source, err := conn.ReadFromIP(buffer)
+			n, source, err := conn.ReadFrom(buffer)
 			if err != nil {
 				var timeoutError net.Error
 				if !errors.As(err, &timeoutError) || !timeoutError.Timeout() {
@@ -107,7 +114,8 @@ func ping(ctx context.Context, iface, target string, packets int, timeout time.D
 				}
 				break
 			}
-			if !source.IP.Equal(dest.IP) {
+			sourceIP, ok := source.(*net.UDPAddr)
+			if !ok || !sourceIP.IP.Equal(dest.IP) {
 				continue
 			}
 			reply, err := icmp.ParseMessage(1, buffer[:n])

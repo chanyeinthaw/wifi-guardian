@@ -1,0 +1,19 @@
+# Managed by Fleet: tether
+[Unit]
+Description=Tether Wi-Fi connection monitor and fallback recovery
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/tether
+Restart=on-failure
+RestartSec=15s
+TimeoutStopSec=25s
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_INET
+LockPersonality=yes
+
+[Install]
+WantedBy=default.target

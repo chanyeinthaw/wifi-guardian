@@ -8,19 +8,20 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 )
 
 func main() {
 	if err := execute(); err != nil {
-		slog.Error("wifi-guardian", "error", err)
+		slog.Error("tether", "error", err)
 		os.Exit(1)
 	}
 }
 
 func execute() error {
-	path := flag.String("config", "/etc/wifi-guardian/config.json", "JSON configuration file")
+	path := flag.String("config", defaultConfigFile(), "JSON configuration file")
 	list := flag.Bool("list", false, "print saved Wi-Fi profiles without changing networking")
 	check := flag.Bool("check", false, "validate config and probe current connection without changing networking")
 	flag.Parse()
@@ -98,4 +99,12 @@ func printJSON(value interface{}) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(value)
+}
+
+func defaultConfigFile() string {
+	root, err := os.UserConfigDir()
+	if err != nil {
+		return "config.json"
+	}
+	return filepath.Join(root, "tether", "config.json")
 }

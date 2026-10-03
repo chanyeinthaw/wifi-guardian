@@ -8,12 +8,12 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
       - run: test -z "$(gofmt -l *.go)"
       - run: go vet ./...
       - run: go test -race ./...
-      - run: CGO_ENABLED=0 go build -o bin/wifi-guardian .
+      - run: CGO_ENABLED=0 go build -o bin/tether .

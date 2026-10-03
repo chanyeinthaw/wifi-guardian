@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -54,7 +55,7 @@ func loadConfig(path string) (config, error) {
 		ConnectTimeout: duration(30 * time.Second), ProbeTimeout: duration(2 * time.Second),
 		WiFiOff: duration(3 * time.Second), StableFor: duration(3 * time.Minute),
 		FailureSamples: 3, Packets: 3, MaxLoss: 0.5, MaxResets: 3,
-		StateFile: "/var/lib/wifi-guardian/state.json",
+		StateFile: defaultStateFile(),
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -105,4 +106,13 @@ func (c config) allowed(uuid, ssid string) bool {
 		}
 	}
 	return false
+}
+
+func defaultStateFile() string {
+	root := os.Getenv("XDG_STATE_HOME")
+	if root == "" {
+		home, _ := os.UserHomeDir()
+		root = filepath.Join(home, ".local", "state")
+	}
+	return filepath.Join(root, "tether", "state.json")
 }

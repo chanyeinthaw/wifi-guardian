@@ -1,10 +1,19 @@
 {
   "interface": "wlan0",
   "networks": [
-    { "uuid": "replace-with-primary-profile-uuid", "ssid": "home-A" },
-    { "uuid": "replace-with-fallback-profile-uuid", "ssid": "home-G" }
+    {
+      "uuid": "replace-with-primary-profile-uuid",
+      "ssid": "home-A"
+    },
+    {
+      "uuid": "replace-with-fallback-profile-uuid",
+      "ssid": "home-G"
+    }
   ],
-  "targets": ["1.1.1.1", "8.8.8.8"],
+  "targets": [
+    "1.1.1.1",
+    "8.8.8.8"
+  ],
   "interval": "10s",
   "failure_samples": 3,
   "packets": 3,
@@ -14,6 +23,5 @@
   "retry_interval": "60s",
   "wifi_off": "3s",
   "max_resets": 3,
-  "stable_for": "3m",
-  "state_file": "/var/lib/wifi-guardian/state.json"
+  "stable_for": "3m"
 }

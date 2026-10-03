@@ -1,4 +1,4 @@
-module github.com/chanyeinthaw/wifi-guardian
+module github.com/chanyeinthaw/tether
 
 go 1.26.0
 
