@@ -1,0 +1,25 @@
+[Unit]
+Description=Wi-Fi connection monitor and fallback recovery
+Wants=NetworkManager.service
+After=NetworkManager.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wifi-guardian -config /etc/wifi-guardian/config.json
+Restart=on-failure
+RestartSec=15s
+TimeoutStopSec=25s
+StateDirectory=wifi-guardian
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+CapabilityBoundingSet=CAP_NET_RAW
+RestrictAddressFamilies=AF_UNIX AF_INET
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
