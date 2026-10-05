@@ -21,6 +21,8 @@
   "probe_timeout": "2s",
   "connect_timeout": "30s",
   "retry_interval": "60s",
+  "priority_check_interval": "60s",
+  "priority_retry_interval": "5m",
   "wifi_off": "3s",
   "max_resets": 3,
   "stable_for": "3m"

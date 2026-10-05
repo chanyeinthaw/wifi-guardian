@@ -11,18 +11,25 @@ import (
 )
 
 type fakeManager struct {
-	current     snapshot
-	attempts    []string
-	radios      []bool
-	activation  func(network) error
-	snapshotErr error
-	radioErr    error
+	current      snapshot
+	attempts     []string
+	radios       []bool
+	activation   func(network) error
+	snapshotErr  error
+	radioErr     error
+	visibleSSIDs []string
+	visibleErr   error
+	scans        int
 }
 
 func (m *fakeManager) snapshot(context.Context, string) (snapshot, error) {
 	return m.current, m.snapshotErr
 }
 func (m *fakeManager) scan(context.Context, string) error { return nil }
+func (m *fakeManager) visible(context.Context, string) ([]string, error) {
+	m.scans++
+	return m.visibleSSIDs, m.visibleErr
+}
 func (m *fakeManager) activate(_ context.Context, _ string, n network) error {
 	m.attempts = append(m.attempts, n.SSID)
 	if m.activation != nil {
@@ -43,6 +50,7 @@ func testController(t *testing.T) (*controller, *fakeManager, *time.Time) {
 		config: config{
 			Interface: "test0", Networks: []network{{"primary", "home-A"}, {"fallback", "home-G"}},
 			Interval: duration(10 * time.Second), RetryInterval: duration(time.Minute),
+			PriorityCheckInterval: duration(time.Minute), PriorityRetryInterval: duration(5 * time.Minute),
 			ConnectTimeout: duration(time.Second), WiFiOff: duration(time.Second),
 			StableFor: duration(3 * time.Minute), FailureSamples: 1, MaxResets: 3,
 			StateFile: filepath.Join(t.TempDir(), "state.json"),

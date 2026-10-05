@@ -32,26 +32,29 @@ type network struct {
 }
 
 type config struct {
-	Interface      string    `json:"interface"`
-	Networks       []network `json:"networks"`
-	Targets        []string  `json:"targets"`
-	Interval       duration  `json:"interval"`
-	RetryInterval  duration  `json:"retry_interval"`
-	ConnectTimeout duration  `json:"connect_timeout"`
-	ProbeTimeout   duration  `json:"probe_timeout"`
-	WiFiOff        duration  `json:"wifi_off"`
-	StableFor      duration  `json:"stable_for"`
-	FailureSamples int       `json:"failure_samples"`
-	Packets        int       `json:"packets"`
-	MaxLoss        float64   `json:"max_loss"`
-	MaxResets      int       `json:"max_resets"`
-	StateFile      string    `json:"state_file"`
+	Interface             string    `json:"interface"`
+	Networks              []network `json:"networks"`
+	Targets               []string  `json:"targets"`
+	Interval              duration  `json:"interval"`
+	RetryInterval         duration  `json:"retry_interval"`
+	PriorityCheckInterval duration  `json:"priority_check_interval"`
+	PriorityRetryInterval duration  `json:"priority_retry_interval"`
+	ConnectTimeout        duration  `json:"connect_timeout"`
+	ProbeTimeout          duration  `json:"probe_timeout"`
+	WiFiOff               duration  `json:"wifi_off"`
+	StableFor             duration  `json:"stable_for"`
+	FailureSamples        int       `json:"failure_samples"`
+	Packets               int       `json:"packets"`
+	MaxLoss               float64   `json:"max_loss"`
+	MaxResets             int       `json:"max_resets"`
+	StateFile             string    `json:"state_file"`
 }
 
 func loadConfig(path string) (config, error) {
 	c := config{
 		Targets:  []string{"1.1.1.1", "8.8.8.8"},
 		Interval: duration(10 * time.Second), RetryInterval: duration(time.Minute),
+		PriorityCheckInterval: duration(time.Minute), PriorityRetryInterval: duration(5 * time.Minute),
 		ConnectTimeout: duration(30 * time.Second), ProbeTimeout: duration(2 * time.Second),
 		WiFiOff: duration(3 * time.Second), StableFor: duration(3 * time.Minute),
 		FailureSamples: 3, Packets: 3, MaxLoss: 0.5, MaxResets: 3,
@@ -90,7 +93,7 @@ func (c config) validate() error {
 			return fmt.Errorf("target %q must be a public IPv4 address", target)
 		}
 	}
-	if c.Interval <= 0 || c.RetryInterval <= 0 || c.ConnectTimeout <= 0 || c.ProbeTimeout <= 0 || c.WiFiOff <= 0 || c.StableFor <= 0 {
+	if c.Interval <= 0 || c.RetryInterval <= 0 || c.PriorityCheckInterval <= 0 || c.PriorityRetryInterval <= 0 || c.ConnectTimeout <= 0 || c.ProbeTimeout <= 0 || c.WiFiOff <= 0 || c.StableFor <= 0 {
 		return errors.New("durations must be positive")
 	}
 	if c.FailureSamples < 1 || c.Packets < 1 || c.Packets > 20 || c.MaxLoss < 0 || c.MaxLoss >= 1 || c.MaxResets < 0 || c.MaxResets > 3 {

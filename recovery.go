@@ -14,6 +14,7 @@ import (
 type networkControl interface {
 	snapshot(context.Context, string) (snapshot, error)
 	scan(context.Context, string) error
+	visible(context.Context, string) ([]string, error)
 	activate(context.Context, string, network) error
 	radio(context.Context, bool) error
 }
@@ -88,15 +89,16 @@ func saveState(path string, s state) error {
 }
 
 type controller struct {
-	config       config
-	nm           networkControl
-	state        state
-	probe        func(context.Context, config, snapshot) (health, error)
-	persist      func(string, state) error
-	wait         func(context.Context, time.Duration) error
-	now          func() time.Time
-	failures     int
-	healthySince time.Time
+	config            config
+	nm                networkControl
+	state             state
+	probe             func(context.Context, config, snapshot) (health, error)
+	persist           func(string, state) error
+	wait              func(context.Context, time.Duration) error
+	now               func() time.Time
+	failures          int
+	healthySince      time.Time
+	nextPriorityCheck time.Time
 }
 
 func (c *controller) observe(ctx context.Context) (snapshot, health, error) {
@@ -138,6 +140,14 @@ func (c *controller) step(ctx context.Context) (time.Duration, error) {
 		return time.Duration(c.config.RetryInterval), err
 	}
 	if h.Internet && c.config.allowed(s.UUID, s.SSID) {
+		s, h, err = c.prefer(ctx, s, h)
+		if err != nil {
+			return time.Duration(c.config.RetryInterval), err
+		}
+		if !h.Internet || !c.config.allowed(s.UUID, s.SSID) {
+			c.healthySince = time.Time{}
+			return time.Duration(c.config.Interval), c.record("suspect", s, h)
+		}
 		return time.Duration(c.config.Interval), c.healthy(s, h)
 	}
 	c.healthySince = time.Time{}

@@ -16,6 +16,8 @@ func TestConfigRejectsUnsafeOrAmbiguousSettings(t *testing.T) {
 	for _, bad := range []string{
 		strings.Replace(valid, `"max_resets": 3`, `"max_resets": 4`, 1),
 		strings.Replace(valid, `"interval": "10s"`, `"interval": "0s"`, 1),
+		strings.Replace(valid, `"priority_check_interval": "60s"`, `"priority_check_interval": "0s"`, 1),
+		strings.Replace(valid, `"priority_retry_interval": "5m"`, `"priority_retry_interval": "0s"`, 1),
 		strings.Replace(valid, `"max_loss": 0.5`, `"max_loss": 1`, 1),
 		strings.Replace(valid, `"interface"`, `"interafce"`, 1),
 		strings.Replace(valid, "replace-with-fallback-profile-uuid", "replace-with-primary-profile-uuid", 1),

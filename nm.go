@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -174,6 +175,60 @@ func (m *manager) scan(ctx context.Context, iface string) error {
 		return err
 	}
 	return m.call(ctx, device, wirelessAPI+".RequestScan", map[string]dbus.Variant{}).Err
+}
+
+// Wait for a completed scan before deciding whether to leave a working fallback.
+func (m *manager) visible(ctx context.Context, iface string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	device, err := m.device(ctx, iface)
+	if err != nil {
+		return nil, err
+	}
+	var before int64
+	if err := m.get(ctx, device, wirelessAPI, "LastScan", &before); err != nil {
+		return nil, err
+	}
+	var started unix.Timespec
+	if err := unix.ClockGettime(unix.CLOCK_BOOTTIME, &started); err != nil {
+		return nil, err
+	}
+	if err := m.scan(ctx, iface); err != nil {
+		return nil, err
+	}
+	for {
+		var scanned int64
+		if err := m.get(ctx, device, wirelessAPI, "LastScan", &scanned); err != nil {
+			return nil, err
+		}
+		if scanned > before {
+			break
+		}
+		if err := pause(ctx, 500*time.Millisecond); err != nil {
+			return nil, err
+		}
+	}
+	var points []dbus.ObjectPath
+	if err := m.get(ctx, device, wirelessAPI, "AccessPoints", &points); err != nil {
+		return nil, err
+	}
+	ssids := make([]string, 0, len(points))
+	for _, point := range points {
+		var lastSeen int32
+		if err := m.get(ctx, point, nmName+".AccessPoint", "LastSeen", &lastSeen); err != nil {
+			return nil, err
+		}
+		// NetworkManager retains old access-point objects after an SSID disappears.
+		if int64(lastSeen) < started.Sec {
+			continue
+		}
+		var ssid []byte
+		if err := m.get(ctx, point, nmName+".AccessPoint", "Ssid", &ssid); err != nil {
+			return nil, err
+		}
+		ssids = append(ssids, string(ssid))
+	}
+	return ssids, nil
 }
 
 func (m *manager) activate(ctx context.Context, iface string, n network) error {

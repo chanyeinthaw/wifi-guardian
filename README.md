@@ -8,7 +8,8 @@ A small Linux service that monitors Wi-Fi and tries saved networks in priority o
 2. After repeated unhealthy samples, request a scan and try the configured saved profiles in order.
 3. If none work and no gateway answered, cycle the Wi-Fi radio. Permit at most three cycles during an outage.
 4. Keep the radio on and retry the saved profiles every minute, even after the reset budget is exhausted.
-5. Restore the reset budget after three minutes of continuously healthy samples. Stay on a working fallback until it fails.
+5. Restore the reset budget after three minutes of continuously healthy samples.
+6. On a healthy fallback, scan once a minute for higher-priority networks and try visible profiles in configuration order. Keep a preferred connection only if its profile matches and its internet probes pass. If all preferred attempts fail, restore the previous fallback immediately. After a failed preferred attempt, wait five minutes before the next priority check. Promotion never cycles the Wi-Fi radio.
 
 Router recovery does not require a button press on the machine. Periodic connection attempts and probes detect when the router starts working again, even if its SSID stayed visible during the outage.
 
@@ -53,6 +54,8 @@ Edit `config.local.json` with your interface and the UUID/SSID pairs from `-list
 | `probe_timeout` | `2s` | Timeout per echo request |
 | `connect_timeout` | `30s` | Deadline for each profile activation |
 | `retry_interval` | `60s` | Delay between recovery rounds |
+| `priority_check_interval` | `60s` | Delay between scans for higher-priority networks on a healthy fallback |
+| `priority_retry_interval` | `5m` | Delay before retrying after preferred-network attempts fail |
 | `wifi_off` | `3s` | Radio-off duration per reset |
 | `max_resets` | `3` | Reset budget, configurable from zero to three |
 | `stable_for` | `3m` | Healthy sampling period before clearing the counter |
