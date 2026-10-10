@@ -1,6 +1,21 @@
 # tether
 
-A small Linux service that monitors Wi-Fi and tries saved networks in priority order. It uses NetworkManager's D-Bus API directly. It does not invoke networking commands or store Wi-Fi passwords.
+A Linux service that monitors Wi-Fi, recovers failed connections, and returns to higher-priority saved networks when they become available.
+
+## Why I built it
+
+My home server runs headlessly, and my router sometimes stops working, so I have to unplug it and plug it back in. After restarting, the router brings up 2.4 GHz before 5 GHz. The server connects to 2.4 GHz and stays there even after my preferred 5 GHz network returns. Other times, the server's Wi-Fi stops working until I turn it off and back on. I didn't want to log into the server to fix either problem every time.
+
+I built Tether to handle those connection changes and recovery attempts automatically.
+
+- Configure saved networks in your preferred order. Tether keeps checking for a higher-priority network even while the current connection works.
+- Keep a preferred connection only after it passes connectivity checks. If it fails, Tether tries to restore the previous working network.
+- Retry saved profiles after repeated connection failures and, when the gateway is unreachable, cycle the Wi-Fi radio within a configurable reset limit.
+- Preserve reset counts across service restarts and restore the radio after an interrupted reset.
+
+The 2.4 GHz and 5 GHz networks are my use case. Tether does not hardcode frequency bands or network names. You configure the saved profiles, their priorities, probe thresholds, retry timings, and reset allowance.
+
+Tether uses NetworkManager's D-Bus API directly. It does not invoke networking commands or store Wi-Fi passwords. It controls the server's Wi-Fi connection; it cannot unplug or restart the router.
 
 ## Recovery
 
